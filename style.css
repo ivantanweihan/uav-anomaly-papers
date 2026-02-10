@@ -1,0 +1,98 @@
+:root{
+  --bg:#0b0e14;
+  --panel:#121826;
+  --muted:#9aa4b2;
+  --text:#e6e9ef;
+  --border:#263042;
+  --accent:#7aa2f7;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  background:var(--bg);
+  color:var(--text);
+}
+.header{
+  padding:24px 20px 10px;
+  max-width:1200px;
+  margin:0 auto;
+}
+h1{margin:0 0 6px; font-size:28px}
+.sub{margin:0; color:var(--muted)}
+.controls{
+  max-width:1200px;
+  margin:12px auto 0;
+  padding:0 20px;
+  display:grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap:12px;
+}
+.control{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px;
+}
+.control label{
+  display:block;
+  font-size:12px;
+  color:var(--muted);
+  margin-bottom:6px;
+}
+.control input, .control select, .control button{
+  width:100%;
+  padding:10px 10px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:#0e1320;
+  color:var(--text);
+}
+.control button{
+  cursor:pointer;
+  margin-top:8px;
+  background:linear-gradient(180deg, #1b2340, #131a30);
+}
+.control button:hover{border-color:var(--accent)}
+.hint{margin-top:6px; font-size:11px; color:var(--muted)}
+.row{display:flex; gap:8px; align-items:center}
+.sep{color:var(--muted)}
+.tablewrap{
+  max-width:1200px;
+  margin:14px auto 40px;
+  padding:0 20px;
+}
+.meta{color:var(--muted); margin:10px 0}
+table{
+  width:100%;
+  border-collapse:separate;
+  border-spacing:0;
+  overflow:hidden;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--panel);
+}
+thead th{
+  position:sticky; top:0;
+  background:#0f1526;
+  border-bottom:1px solid var(--border);
+  font-size:12px;
+  text-align:left;
+  padding:10px;
+  color:#cbd5e1;
+  z-index:1;
+}
+tbody td{
+  padding:10px;
+  border-bottom:1px solid var(--border);
+  font-size:13px;
+  vertical-align:top;
+}
+tbody tr:hover td{background:#0e1320}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+.footer{max-width:1200px;margin:0 auto;padding:0 20px 24px;color:var(--muted)}
+@media (max-width:1100px){
+  .controls{grid-template-columns: repeat(2, minmax(0, 1fr));}
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UAV Anomaly Papers</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>UAV Anomaly Paper List</h1>
+    <p class="sub">Client-side filterable table (GitHub Pages friendly). Data loaded from <code>data.json</code>.</p>
+  </header>
+
+  <section class="controls">
+    <div class="control">
+      <label for="pillarSelect">Pillar</label>
+      <select id="pillarSelect" multiple></select>
+      <div class="hint">Tip: Ctrl/⌘-click to multi-select. Leave empty = all.</div>
+    </div>
+
+    <div class="control">
+      <label for="searchBox">Search</label>
+      <input id="searchBox" type="search" placeholder="title, authors, venue, year, technique..." />
+    </div>
+
+    <div class="control">
+      <label for="yearMin">Year</label>
+      <div class="row">
+        <input id="yearMin" type="number" placeholder="min" />
+        <span class="sep">–</span>
+        <input id="yearMax" type="number" placeholder="max" />
+      </div>
+    </div>
+
+    <div class="control">
+      <label for="colsSelect">Columns</label>
+      <select id="colsSelect" multiple></select>
+      <div class="hint">Hide/show columns to keep the table readable.</div>
+    </div>
+
+    <div class="control">
+      <button id="resetBtn" type="button">Reset filters</button>
+      <button id="downloadCsvBtn" type="button">Download filtered CSV</button>
+    </div>
+  </section>
+
+  <section class="tablewrap">
+    <div class="meta" id="meta"></div>
+    <table id="papersTable">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <footer class="footer">
+    <small>Generated from your Excel masterlist. Hosted on GitHub Pages.</small>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
