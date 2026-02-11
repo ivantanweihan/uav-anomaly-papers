@@ -1,9 +1,11 @@
 import pandas as pd, json
 
-xlsx_path = 'listofpapers_final.xlsx'  # put your latest Excel next to this script
+xlsx_path = 'listofpapers_final_5pillars.xlsx'  # keep next to this script
 out_path = 'data.json'
 
-df = pd.read_excel(xlsx_path)
+pillars = ["Generation","Prevention","Detection","Recovery/Mitigation","Analysis/Learning"]
+
+df = pd.read_excel(xlsx_path, sheet_name="Papers")
 df = df.loc[:, ~df.columns.str.match(r'^Unnamed')]
 df = df.fillna('')
 
@@ -11,9 +13,23 @@ for col in df.columns:
     df[col] = df[col].astype(str)
 
 records = df.to_dict(orient='records')
-pillars = sorted({r.get('Pillar','').strip() for r in records if r.get('Pillar','').strip()})
+
+data = {
+  "pillars": pillars,
+  "papers": records,
+  "facets": [
+    {"key":"Pillar","label":"Pillar"},
+    {"key":"Technique","label":"Technique"},
+    {"key":"DataSource","label":"Data source"},
+    {"key":"ApplicationContext","label":"Application context"},
+    {"key":"DatasetAvailable","label":"Dataset available"},
+    {"key":"SourceOfAnomaly","label":"Source of anomaly"},
+    {"key":"NatureOfAnomaly","label":"Nature of anomaly"},
+    {"key":"DetectionApproach","label":"Detection approach"},
+  ]
+}
 
 with open(out_path, 'w', encoding='utf-8') as f:
-    json.dump({'pillars': pillars, 'papers': records}, f, ensure_ascii=False)
+    json.dump(data, f, ensure_ascii=False)
 
-print(f'Wrote {out_path} with {len(records)} papers and {len(pillars)} pillars.')
+print(f'Wrote {out_path} with {len(records)} papers.')
