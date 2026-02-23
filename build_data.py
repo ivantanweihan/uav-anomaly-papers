@@ -1,6 +1,6 @@
 import pandas as pd, json
 
-xlsx_path = 'listofpapers_final_5pillars.xlsx'  # keep next to this script
+xlsx_path = 'check.xlsx'  # keep next to this script
 out_path = 'data.json'
 
 pillars = ["Generation","Prevention","Detection","Recovery/Mitigation","Analysis/Learning"]
