@@ -1,6 +1,6 @@
 import pandas as pd, json
 
-xlsx_path = 'check.xlsx'  # keep next to this script
+xlsx_path = 'check_technique_4cats.xlsx'  # keep next to this script
 out_path = 'data.json'
 
 pillars = ["Generation","Prevention","Detection","Recovery/Mitigation","Analysis/Learning"]
