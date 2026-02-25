@@ -7,94 +7,62 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div>
-        <h1>UAV Anomaly Paper List</h1>
-        <p class="sub">Faceted filtering + stats dashboard + BibTeX export (GitHub Pages friendly).</p>
-      </div>
-      <div class="topbar-actions">
-        <button id="resetBtn" type="button">Reset</button>
-        <button id="downloadCsvBtn" type="button">Download CSV</button>
-        <button id="downloadBibBtn" type="button">Download BibTeX</button>
-      </div>
-    </div>
+  <header class="header">
+    <h1>UAV Anomaly Paper List</h1>
+    <p class="sub">Client-side filterable table (GitHub Pages friendly). Data loaded from <code>data.json</code>.</p>
   </header>
 
-  <main class="layout">
-    <aside class="sidebar">
-      <div class="panel">
-        <label class="label" for="searchBox">Search</label>
-        <input id="searchBox" type="search" placeholder="title, authors, venue, year, method..." />
-        <div class="hint">Search runs across all visible metadata (BibTeX excluded for speed).</div>
-      </div>
+  <section class="controls">
+    <div class="control">
+      <label for="pillarSelect">Pillar</label>
+      <select id="pillarSelect" multiple></select>
+      <div class="hint">Tip: Ctrl/⌘-click to multi-select. Leave empty = all.</div>
+    
+    <div class="control">
+      <label for="sourceSelect">Source of anomaly</label>
+      <select id="sourceSelect" multiple></select>
+      <div class="hint">Ctrl/⌘-click to multi-select. Leave empty = all.</div>
+    </div>
+</div>
 
-      <div class="panel">
-        <div class="panel-title">Year</div>
-        <div class="row">
-          <input id="yearMin" type="number" placeholder="min" />
-          <span class="sep">–</span>
-          <input id="yearMax" type="number" placeholder="max" />
-        </div>
-      </div>
+    <div class="control">
+      <label for="searchBox">Search</label>
+      <input id="searchBox" type="search" placeholder="title, authors, venue, year, technique..." />
+    </div>
 
-      <div class="panel">
-        <div class="panel-title">Filters</div>
-        <div id="facets"></div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">Columns</div>
-        <select id="colsSelect" multiple></select>
-        <div class="hint">Tip: Ctrl/⌘-click to multi-select. Hide heavy columns (e.g., Abstract) if scrolling feels slow.</div>
-      </div>
-    </aside>
-
-    <section class="content">
-      <section class="panel dashboard">
-        <div class="dashboard-head">
-          <div class="panel-title">Dashboard</div>
-          <div class="meta" id="meta"></div>
-        </div>
-        <div class="charts">
-          <div class="chart-card">
-            <div class="chart-title">Papers per pillar</div>
-            <canvas id="pillarChart" height="140"></canvas>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Papers per year</div>
-            <canvas id="yearChart" height="140"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel tablepanel">
-        <div class="tablewrap">
-          <table id="papersTable">
-            <thead></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-    </section>
-  </main>
-
-  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal-card">
-      <div class="modal-head">
-        <div id="modalTitle" class="modal-title"></div>
-        <button id="modalClose" class="iconbtn" aria-label="Close">✕</button>
-      </div>
-      <div id="modalBody" class="modal-body"></div>
-      <div class="modal-actions">
-        <button id="copyBibBtn" type="button">Copy BibTeX</button>
-        <button id="openLinkBtn" type="button">Open DOI/URL</button>
+    <div class="control">
+      <label for="yearMin">Year</label>
+      <div class="row">
+        <input id="yearMin" type="number" placeholder="min" />
+        <span class="sep">–</span>
+        <input id="yearMax" type="number" placeholder="max" />
       </div>
     </div>
-  </div>
 
-  <!-- Chart.js (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <div class="control">
+      <label for="colsSelect">Columns</label>
+      <select id="colsSelect" multiple></select>
+      <div class="hint">Hide/show columns to keep the table readable.</div>
+    </div>
+
+    <div class="control">
+      <button id="resetBtn" type="button">Reset filters</button>
+      <button id="downloadCsvBtn" type="button">Download filtered CSV</button>
+    </div>
+  </section>
+
+  <section class="tablewrap">
+    <div class="meta" id="meta"></div>
+    <table id="papersTable">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <footer class="footer">
+    <small>Generated from your Excel masterlist. Hosted on GitHub Pages.</small>
+  </footer>
+
   <script src="script.js"></script>
 </body>
 </html>
