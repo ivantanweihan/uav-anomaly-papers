@@ -23,32 +23,28 @@
 
   <main class="layout">
     <aside class="sidebar">
-      <div class="panel">
+<div class="panel">
+        <div class="panel-title">Filters</div>
+        <div id="facets"></div>
+      
+<div class="panel">
         <label class="label" for="searchBox">Search</label>
         <input id="searchBox" type="search" placeholder="title, authors, venue, year, method..." />
         <div class="hint">Search runs across all visible metadata (BibTeX excluded for speed).</div>
-      </div>
-
-      <div class="panel">
+      
+<div class="panel">
         <div class="panel-title">Year</div>
         <div class="row">
           <input id="yearMin" type="number" placeholder="min" />
           <span class="sep">–</span>
           <input id="yearMax" type="number" placeholder="max" />
         </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title">Filters</div>
-        <div id="facets"></div>
-      </div>
-
-      <div class="panel">
+      
+<div class="panel">
         <div class="panel-title">Columns</div>
         <select id="colsSelect" multiple></select>
         <div class="hint">Tip: Ctrl/⌘-click to multi-select. Hide heavy columns (e.g., Abstract) if scrolling feels slow.</div>
-      </div>
-    </aside>
+      </aside>
 
     <section class="content">
       <section class="panel dashboard">

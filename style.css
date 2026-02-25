@@ -46,7 +46,7 @@ button:hover{border-color:var(--accent)}
   grid-template-columns: 360px 1fr;
   gap:14px;
 }
-.sidebar{position:sticky; top:14px; align-self:start}
+.sidebar{position:sticky; top:14px; align-self:start; max-height: calc(100vh - 28px); overflow:auto; padding-right:6px}
 .panel{
   background:var(--panel);
   border:1px solid var(--border);
@@ -135,7 +135,7 @@ a:hover{text-decoration:underline}
   border-radius:10px;
   font-size:12px;
 }
-.facet-items{margin-top:8px; max-height:240px; overflow:auto; padding-right:4px}
+.facet-items{margin-top:8px; max-height:180px; overflow:auto; padding-right:4px}
 .facet-item{
   display:flex;
   align-items:flex-start;
