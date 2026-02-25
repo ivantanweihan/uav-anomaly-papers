@@ -143,21 +143,25 @@ function initPillarPicker(){
 function initSourcePicker(){
   const sourceSelect = document.getElementById('sourceSelect');
   if(!sourceSelect) return;
+
   sourceSelect.innerHTML = '';
 
-  // build unique values
   const set = new Set();
   for(const p of DATA.papers){
     const v = (p.SourceOfAnomaly ?? '').toString().trim();
     if(v) set.add(v);
   }
+
   const values = Array.from(set).sort((a,b)=>a.localeCompare(b));
+
   for(const v of values){
-    sourceSelect.appendChild(el('option', {value: v}, [v]));
+    const option = document.createElement("option");
+    option.value = v;
+    option.textContent = v;
+    sourceSelect.appendChild(option);
   }
+
   sourceSelect.addEventListener('change', applyFilters);
-}
-  pillarSelect.addEventListener('change', applyFilters);
 }
 
 function initControls(){
