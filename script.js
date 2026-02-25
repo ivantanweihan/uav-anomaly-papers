@@ -4,27 +4,18 @@ async function loadData(){
   return await res.json();
 }
 
-function el(tag, attrs={}, children=[]){
-  const e = document.createElement(tag);
-  for(const [k,v] of Object.entries(attrs)){
-    if(k === 'class') e.className = v;
-    else if(k === 'html') e.innerHTML = v;
-    else e.setAttribute(k, v);
-  }
-  for(const c of children) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-  return e;
-}
-
-function getMultiSelectValues(selectEl){
-  return Array.from(selectEl.selectedOptions).map(o => o.value);
-}
-
+function normalize(s){ return (s ?? '').toString().toLowerCase(); }
 function safeYear(val){
-  const n = parseInt(val, 10);
+  const n = parseInt((val ?? '').toString(), 10);
   return Number.isFinite(n) ? n : null;
 }
 
-function normalize(s){ return (s ?? '').toString().toLowerCase(); }
+function splitValues(raw){
+  const s = (raw ?? '').toString().trim();
+  if(!s) return [];
+  const parts = s.split(/[\n;|]+/g).flatMap(x => x.split(/\s*,\s*/g));
+  return parts.map(p => p.trim()).filter(Boolean);
+}
 
 function toCsv(rows, cols){
   const esc = (v) => {
@@ -37,8 +28,8 @@ function toCsv(rows, cols){
   return [header, ...lines].join('\n');
 }
 
-function downloadText(filename, text){
-  const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+function downloadText(filename, text, mime='text/plain;charset=utf-8'){
+  const blob = new Blob([text], {type:mime});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -52,16 +43,58 @@ function downloadText(filename, text){
 function linkify(value){
   const s = (value ?? '').toString().trim();
   if(!s) return '';
-  // if it already looks like a URL, make it clickable
   if(/^https?:\/\//i.test(s)){
     return `<a href="${s}" target="_blank" rel="noopener noreferrer">${s}</a>`;
+  }
+  if(/^10\.\d{4,9}\//.test(s)){
+    const url = `https://doi.org/${s}`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${s}</a>`;
   }
   return s;
 }
 
-let DATA = null;
-let ALL_COLS = [];
-let VISIBLE_COLS = [];
+let DATA=null;
+let ALL_COLS=[];
+let VISIBLE_COLS=[];
+let FACETS=[];
+let state = { facetSelected: {} };
+
+let pillarChart=null;
+let yearChart=null;
+
+function matchesAllFilters(paper, opts={excludeFacet:null}){
+  const q = normalize(document.getElementById('searchBox').value);
+  if(q){
+    const colsForSearch = ALL_COLS.filter(c => c !== 'BibTeX');
+    const hay = colsForSearch.map(c => normalize(paper[c])).join(' | ');
+    if(!hay.includes(q)) return false;
+  }
+
+  const yMin = safeYear(document.getElementById('yearMin').value);
+  const yMax = safeYear(document.getElementById('yearMax').value);
+  const y = safeYear(paper.Year);
+  if(yMin !== null && (y === null || y < yMin)) return false;
+  if(yMax !== null && (y === null || y > yMax)) return false;
+
+  for(const f of FACETS){
+    if(opts.excludeFacet && opts.excludeFacet === f.key) continue;
+    const selected = state.facetSelected[f.key];
+    if(selected && selected.size){
+      const vals = splitValues(paper[f.key]);
+      const ok = vals.some(v => selected.has(v));
+      if(!ok) return false;
+    }
+  }
+  return true;
+}
+
+function getFilteredPapers(){
+  return DATA.papers.filter(p => matchesAllFilters(p));
+}
+
+function renderMeta(filtered){
+  document.getElementById('meta').textContent = `Showing ${filtered.length} / ${DATA.papers.length} papers`;
+}
 
 function renderTable(rows){
   const table = document.getElementById('papersTable');
@@ -72,134 +105,304 @@ function renderTable(rows){
 
   const trh = document.createElement('tr');
   for(const col of VISIBLE_COLS){
-    trh.appendChild(el('th', {}, [col]));
+    const th = document.createElement('th');
+    th.textContent = col;
+    trh.appendChild(th);
   }
   thead.appendChild(trh);
 
-  for(const r of rows){
+  for(const p of rows){
     const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', () => openModal(p));
     for(const col of VISIBLE_COLS){
-      let v = r[col] ?? '';
-      if(col === 'DOI_or_URL') tr.appendChild(el('td', {html: linkify(v)}));
-      else tr.appendChild(el('td', {}, [v]));
+      const td = document.createElement('td');
+      if(col === 'DOI_or_URL') td.innerHTML = linkify(p[col]);
+      else td.textContent = (p[col] ?? '').toString();
+      tr.appendChild(td);
     }
     tbody.appendChild(tr);
   }
-
-  const meta = document.getElementById('meta');
-  meta.textContent = `Showing ${rows.length} / ${DATA.papers.length} papers`;
 }
 
-function applyFilters(){
-  const pillars = new Set(getMultiSelectValues(document.getElementById('pillarSelect')));
-  const sources = new Set(getMultiSelectValues(document.getElementById('sourceSelect')));
-  const q = normalize(document.getElementById('searchBox').value);
-  const yMin = safeYear(document.getElementById('yearMin').value);
-  const yMax = safeYear(document.getElementById('yearMax').value);
-
-  const colsForSearch = ALL_COLS.filter(c => c !== 'BibTeX'); // keep search snappy
-
-  const filtered = DATA.papers.filter(p => {
-    if(pillars.size && !pillars.has((p.Pillar ?? '').toString())) return false;
-
-    if(sources.size && !sources.has((p.SourceOfAnomaly ?? '').toString())) return false;
-
-    const y = safeYear(p.Year);
-    if(yMin !== null && (y === null || y < yMin)) return false;
-    if(yMax !== null && (y === null || y > yMax)) return false;
-
-    if(q){
-      const hay = colsForSearch.map(c => normalize(p[c])).join(' | ');
-      if(!hay.includes(q)) return false;
+function facetCounts(excludeFacetKey){
+  const counts = new Map();
+  for(const p of DATA.papers){
+    if(!matchesAllFilters(p, {excludeFacet: excludeFacetKey})) continue;
+    for(const v of splitValues(p[excludeFacetKey])){
+      counts.set(v, (counts.get(v) ?? 0) + 1);
     }
-    return true;
-  });
+  }
+  return counts;
+}
 
-  renderTable(filtered);
-  return filtered;
+function renderFacets(){
+  const facetsDiv = document.getElementById('facets');
+  facetsDiv.innerHTML = '';
+
+  for(const f of FACETS){
+    if(!state.facetSelected[f.key]) state.facetSelected[f.key] = new Set();
+
+    const section = document.createElement('div');
+    section.className = 'facet';
+
+    const head = document.createElement('div');
+    head.className = 'facet-title';
+
+    const title = document.createElement('div');
+    title.textContent = f.label;
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.textContent = 'Clear';
+    clearBtn.addEventListener('click', () => {
+      state.facetSelected[f.key] = new Set();
+      renderFacets();
+      apply();
+    });
+
+    head.appendChild(title);
+    head.appendChild(clearBtn);
+
+    const items = document.createElement('div');
+    items.className = 'facet-items';
+
+    const allVals = new Map();
+    for(const p of DATA.papers){
+      for(const v of splitValues(p[f.key])){
+        allVals.set(v, (allVals.get(v) ?? 0) + 1);
+      }
+    }
+
+    const dynCounts = facetCounts(f.key);
+
+    const sorted = Array.from(allVals.entries())
+      .sort((a,b) => (b[1]-a[1]) || a[0].localeCompare(b[0]));
+
+    for(const [val] of sorted){
+      const dyn = dynCounts.get(val) ?? 0;
+
+      const row = document.createElement('div');
+      row.className = 'facet-item' + (dyn === 0 ? ' disabled' : '');
+
+      const left = document.createElement('div');
+      left.className = 'facet-left';
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = state.facetSelected[f.key].has(val);
+      cb.disabled = (dyn === 0 && !cb.checked);
+      cb.addEventListener('change', () => {
+        if(cb.checked) state.facetSelected[f.key].add(val);
+        else state.facetSelected[f.key].delete(val);
+        renderFacets();
+        apply();
+      });
+
+      const name = document.createElement('div');
+      name.className = 'facet-name';
+      name.textContent = val;
+
+      left.appendChild(cb);
+      left.appendChild(name);
+
+      const count = document.createElement('div');
+      count.className = 'facet-count';
+      count.textContent = `${dyn}`;
+
+      row.appendChild(left);
+      row.appendChild(count);
+      items.appendChild(row);
+    }
+
+    section.appendChild(head);
+    section.appendChild(items);
+    facetsDiv.appendChild(section);
+  }
 }
 
 function initColumnPicker(){
   const colsSelect = document.getElementById('colsSelect');
   colsSelect.innerHTML = '';
+
   for(const c of ALL_COLS){
-    const opt = el('option', {value: c}, [c]);
-    opt.selected = true;
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    opt.selected = (c !== 'BibTeX'); // hide BibTeX by default
     colsSelect.appendChild(opt);
   }
+  VISIBLE_COLS = Array.from(colsSelect.selectedOptions).map(o => o.value);
+
   colsSelect.addEventListener('change', () => {
-    VISIBLE_COLS = getMultiSelectValues(colsSelect);
-    applyFilters();
+    VISIBLE_COLS = Array.from(colsSelect.selectedOptions).map(o => o.value);
+    apply();
   });
 }
 
-function initPillarPicker(){
-  const pillarSelect = document.getElementById('pillarSelect');
-  if(!pillarSelect) return;
-  pillarSelect.innerHTML = '';
-for(const p of DATA.pillars){
-    pillarSelect.appendChild(el('option', {value: p}, [p]));
+function updateCharts(filtered){
+  const pillarOrder = DATA.pillars ?? [];
+  const pillarCounts = new Map(pillarOrder.map(p => [p, 0]));
+  for(const p of filtered){
+    const key = (p.Pillar ?? '').toString().trim();
+    if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
+    pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
   }
-  pillarSelect.addEventListener('change', applyFilters);
-}
+  const pillarLabels = Array.from(pillarCounts.keys());
+  const pillarData = pillarLabels.map(k => pillarCounts.get(k));
 
-function initSourcePicker(){
-  const sourceSelect = document.getElementById('sourceSelect');
-  if(!sourceSelect) return;
-  sourceSelect.innerHTML = '';
-// build unique values
-  const set = new Set();
-  for(const p of DATA.papers){
-    const v = (p.SourceOfAnomaly ?? '').toString().trim();
-    if(v) set.add(v);
+  const yearCounts = new Map();
+  for(const p of filtered){
+    const y = safeYear(p.Year);
+    if(y === null) continue;
+    yearCounts.set(y, (yearCounts.get(y) ?? 0) + 1);
   }
+  const years = Array.from(yearCounts.keys()).sort((a,b)=>a-b);
+  const yearData = years.map(y => yearCounts.get(y));
 
-  const values = Array.from(set).sort((a,b)=>a.localeCompare(b));
-  for(const v of values){
-    sourceSelect.appendChild(el('option', {value: v}, [v]));
-  }
+  const pillarCtx = document.getElementById('pillarChart').getContext('2d');
+  const yearCtx = document.getElementById('yearChart').getContext('2d');
 
-  sourceSelect.addEventListener('change', applyFilters);
-}
-function initControls(){
-  document.getElementById('searchBox').addEventListener('input', applyFilters);
-  document.getElementById('yearMin').addEventListener('input', applyFilters);
-  document.getElementById('yearMax').addEventListener('input', applyFilters);
+  if(pillarChart) pillarChart.destroy();
+  if(yearChart) yearChart.destroy();
 
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    document.getElementById('searchBox').value = '';
-    document.getElementById('yearMin').value = '';
-    document.getElementById('yearMax').value = '';
-    const pillarSelect = document.getElementById('pillarSelect');
-    Array.from(pillarSelect.options).forEach(o => o.selected = false);
-    const sourceSelect = document.getElementById('sourceSelect');
-    if(sourceSelect) Array.from(sourceSelect.options).forEach(o => o.selected = false);
-    const colsSelect = document.getElementById('colsSelect');
-    Array.from(colsSelect.options).forEach(o => o.selected = true);
-    VISIBLE_COLS = [...ALL_COLS];
-    applyFilters();
+  pillarChart = new Chart(pillarCtx, {
+    type: 'bar',
+    data: { labels: pillarLabels, datasets: [{ label: 'Papers', data: pillarData }] },
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
   });
 
-  document.getElementById('downloadCsvBtn').addEventListener('click', () => {
-    const filtered = applyFilters();
-    const csv = toCsv(filtered, ALL_COLS);
-    downloadText('filtered_papers.csv', csv);
+  yearChart = new Chart(yearCtx, {
+    type: 'line',
+    data: { labels: years, datasets: [{ label: 'Papers', data: yearData, tension:0.2 }] },
+    options: { responsive:true, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{precision:0}}} }
+  });
+}
+
+function apply(){
+  const filtered = getFilteredPapers();
+  renderMeta(filtered);
+  renderTable(filtered);
+  updateCharts(filtered);
+}
+
+function resetAll(){
+  document.getElementById('searchBox').value = '';
+  document.getElementById('yearMin').value = '';
+  document.getElementById('yearMax').value = '';
+  for(const f of FACETS) state.facetSelected[f.key] = new Set();
+  const colsSelect = document.getElementById('colsSelect');
+  Array.from(colsSelect.options).forEach(o => o.selected = (o.value !== 'BibTeX'));
+  VISIBLE_COLS = Array.from(colsSelect.selectedOptions).map(o => o.value);
+  renderFacets();
+  apply();
+}
+
+function bibtexFor(p){
+  const b = (p.BibTeX ?? '').toString().trim();
+  if(b) return b;
+  const key = (p.BibKey ?? '').toString().trim() || 'missingkey';
+  const title = (p.Title ?? '').toString().replaceAll('{','').replaceAll('}','');
+  const year = safeYear(p.Year);
+  const authors = (p.Authors ?? '').toString();
+  return `@misc{${key},\n  title={${title}},\n  author={${authors}},\n  year={${year ?? ''}},\n}\n`;
+}
+
+function bibtexDownload(filtered){
+  const entries = filtered.map(bibtexFor).filter(x => x.trim().length > 0);
+  const text = entries.join('\n\n') + '\n';
+  downloadText('filtered_papers.bib', text, 'application/x-bibtex;charset=utf-8');
+}
+
+function csvDownload(filtered){
+  const csv = toCsv(filtered, ALL_COLS);
+  downloadText('filtered_papers.csv', csv, 'text/csv;charset=utf-8');
+}
+
+// Modal
+let currentModalPaper=null;
+function kvRow(k,v,isHtml=false){
+  const wrap=document.createElement('div'); wrap.className='kv';
+  const kk=document.createElement('div'); kk.className='k'; kk.textContent=k;
+  const vv=document.createElement('div'); vv.className='v';
+  if(isHtml) vv.innerHTML=v; else vv.textContent=(v ?? '').toString();
+  wrap.appendChild(kk); wrap.appendChild(vv);
+  return wrap;
+}
+function openModal(p){
+  currentModalPaper=p;
+  document.getElementById('modalTitle').textContent=(p.Title ?? '').toString() || '(Untitled)';
+  const body=document.getElementById('modalBody'); body.innerHTML='';
+  body.appendChild(kvRow('Authors', p.Authors));
+  body.appendChild(kvRow('Year', p.Year));
+  body.appendChild(kvRow('Venue', p['Venue/Publisher']));
+  body.appendChild(kvRow('Pillar', p.Pillar));
+  body.appendChild(kvRow('DOI/URL', linkify(p.DOI_or_URL), true));
+  body.appendChild(kvRow('Abstract', p.Abstract));
+  body.appendChild(kvRow('Key findings', p.KeyFindings));
+  body.appendChild(kvRow('Limitations', p.Limitations));
+  body.appendChild(kvRow('BibTeX', bibtexFor(p)));
+  const modal=document.getElementById('modal');
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden','false');
+}
+function closeModal(){
+  const modal=document.getElementById('modal');
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden','true');
+  currentModalPaper=null;
+}
+function initModal(){
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.getElementById('modal').addEventListener('click', (e)=>{ if(e.target.id==='modal') closeModal(); });
+  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
+
+  document.getElementById('copyBibBtn').addEventListener('click', async ()=>{
+    if(!currentModalPaper) return;
+    const text=bibtexFor(currentModalPaper);
+    try{
+      await navigator.clipboard.writeText(text);
+      const btn=document.getElementById('copyBibBtn');
+      const prev=btn.textContent;
+      btn.textContent='Copied!';
+      setTimeout(()=>btn.textContent=prev, 900);
+    }catch(err){
+      alert('Copy failed. Your browser may block clipboard access on this page.');
+    }
+  });
+
+  document.getElementById('openLinkBtn').addEventListener('click', ()=>{
+    if(!currentModalPaper) return;
+    const s=(currentModalPaper.DOI_or_URL ?? '').toString().trim();
+    let url=s;
+    if(/^10\.\d{4,9}\//.test(s)) url=`https://doi.org/${s}`;
+    if(/^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener');
+    else alert('No DOI/URL available for this paper.');
   });
 }
 
 (async function main(){
   try{
-    DATA = await loadData();
-    ALL_COLS = Object.keys(DATA.papers[0] ?? {});
-    VISIBLE_COLS = [...ALL_COLS];
-
-    initPillarPicker();
-    initSourcePicker();
+    DATA=await loadData();
+    FACETS=DATA.facets ?? [];
+    ALL_COLS=Object.keys(DATA.papers[0] ?? {});
     initColumnPicker();
-    initControls();
-    applyFilters();
+    renderFacets();
+    initModal();
+
+    document.getElementById('searchBox').addEventListener('input', ()=>{ renderFacets(); apply(); });
+    document.getElementById('yearMin').addEventListener('input', ()=>{ renderFacets(); apply(); });
+    document.getElementById('yearMax').addEventListener('input', ()=>{ renderFacets(); apply(); });
+
+    document.getElementById('resetBtn').addEventListener('click', resetAll);
+    document.getElementById('downloadCsvBtn').addEventListener('click', ()=>csvDownload(getFilteredPapers()));
+    document.getElementById('downloadBibBtn').addEventListener('click', ()=>bibtexDownload(getFilteredPapers()));
+
+    apply();
   }catch(err){
     console.error(err);
-    document.body.prepend(el('div', {class:'error', html:`<p style="padding:16px;color:#fff;background:#b91c1c">Error: ${err.message}</p>`}));
+    document.body.prepend(Object.assign(document.createElement('div'), {
+      innerHTML: `<p style="padding:16px;color:#fff;background:#b91c1c">Error: ${err.message}</p>`
+    }));
   }
 })();
