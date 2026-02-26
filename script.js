@@ -19,39 +19,35 @@ function splitValues(raw){
 
 // Derive a coarse anomaly-type label for RQ1-style filtering.
 // Categories: Hardware, Software/Control, Communication, Environmental, Operational/Policy
-function deriveAnomalyType(p){
+function deriveAnomalyType(p) {
   const src = normalize(p.SourceOfAnomaly);
-  const nat = normalize(p.NatureOfAnomaly);
-  const title = normalize(p.Title);
 
-  const text = `${src} ${nat} ${title}`;
+  if (!src) return "";
 
-  // Communication
-  if(text.match(/\b(comm|communication|network|link|telemetry|packet|latency|loss|dropout|rf|radio|jamming|jam|spoof|spoofing|gps|gnss|c2|command[\s-]*and[\s-]*control)\b/)){
-    return "Communication";
+  // direct matches (after normalize)
+  if (src === "hardware") return "Hardware";
+  if (src === "software/control" || src === "software" || src === "control" || src === "software control") {
+    return "Software/Control";
   }
-
-  // Environmental
-  if(text.match(/\b(environment|wind|gust|weather|rain|fog|temperature|thermal|magnetic|interference|multipath|turbulence|obstacle|terrain|illumination|lighting)\b/)){
-    return "Environmental";
-  }
-
-  // Operational / Policy
-  if(text.match(/\b(operational|operator|pilot|human|procedure|policy|mission|planning|rule[\s-]*violation|violation|unsafe|compliance|regulat|airspace|intrusion|no[-\s]*fly|nfz)\b/)){
+  if (src === "communication" || src === "comms" || src === "network") return "Communication";
+  if (src === "environmental" || src === "environment") return "Environmental";
+  if (
+    src === "operational/policy" ||
+    src === "operational" ||
+    src === "policy" ||
+    src === "operations/policy" ||
+    src === "operational policy"
+  ) {
     return "Operational/Policy";
   }
 
-  // Software / Control
-  if(text.match(/\b(software|firmware|bug|glitch|crash|exception|control|controller|pid|lqr|mpc|autopilot|px4|ardupilot|navigation|planning|estimat|state[\s-]*estimation|kalman|algorithm|model[\s-]*error)\b/)){
-    return "Software/Control";
+  // fallback: if column sometimes already has the exact label casing
+  // (e.g., "Hardware") and normalize() didn't collapse it as expected
+  const raw = (p.SourceOfAnomaly || "").trim();
+  if (raw === "Hardware" || raw === "Software/Control" || raw === "Communication" || raw === "Environmental" || raw === "Operational/Policy") {
+    return raw;
   }
 
-  // Hardware (default if it looks like a physical component/sensor/actuator)
-  if(text.match(/\b(hardware|sensor|imu|gyroscope|accelerometer|magnetometer|barometer|gps|gnss|camera|lidar|radar|motor|propeller|actuator|servo|battery|power|esc|rotor|wear|degradation|fault|failure)\b/)){
-    return "Hardware";
-  }
-
-  // Fallback: if nothing matches, leave blank (won't show in facet list)
   return "";
 }
 
