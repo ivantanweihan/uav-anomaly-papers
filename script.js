@@ -1,5 +1,5 @@
 async function loadData(){
-  const res = await fetch('data.json', {cache:'no-store'});
+  const res = await fetch('data.json', { cache: 'no-store' });
   if(!res.ok) throw new Error('Failed to load data.json');
   return await res.json();
 }
@@ -14,32 +14,12 @@ function splitValues(raw){
   const s = (raw ?? '').toString().trim();
   if(!s) return [];
   const parts = s.split(/[\n;|]+/g).flatMap(x => x.split(/\s*,\s*/g));
-  return parts
-    .map(p => p.trim())
-    .filter(Boolean)
-    .map(p => {
-      // Normalize lifecycle naming variants
-      if(p === "Recovery / Mitigation") return "Recovery/Mitigation";
-      if(p === "Analysis / Learning") return "Analysis/Learning";
-      return p;
-    });
-}
-
-function deriveAnomalyType(p) {
-  const src = normalize(p.SourceOfAnomaly);
-  if (!src) return "";
-
-  if (src === "hardware") return "Hardware";
-  if (src === "software/control" || src === "software" || src === "control" || src === "software control") return "Software/Control";
-  if (src === "communication" || src === "comms" || src === "network") return "Communication";
-  if (src === "environmental" || src === "environment") return "Environmental";
-  if (src === "operational/policy" || src === "operational" || src === "policy" || src === "operations/policy" || src === "operational policy") return "Operational/Policy";
-
-  const raw = (p.SourceOfAnomaly || "").trim();
-  if (raw === "Hardware" || raw === "Software/Control" || raw === "Communication" || raw === "Environmental" || raw === "Operational/Policy") {
-    return raw;
-  }
-  return "";
+  return parts.map(p => p.trim()).filter(Boolean).map(p => {
+    // normalize lifecycle variants
+    if(p === "Recovery / Mitigation") return "Recovery/Mitigation";
+    if(p === "Analysis / Learning") return "Analysis/Learning";
+    return p;
+  });
 }
 
 function toCsv(rows, cols){
@@ -76,15 +56,16 @@ function formatDoiOrUrl(s){
   return s;
 }
 
-let DATA=null;
-let ALL_COLS=[];
-let VISIBLE_COLS=[];
-let FACETS=[];
+let DATA = null;
+let ALL_COLS = [];
+let VISIBLE_COLS = [];
+let FACETS = [];
 let state = { facetSelected: {} };
 
-let pillarChart=null;
-let yearChart=null;
+let pillarChart = null;
+let yearChart = null;
 
+// ---------- Filtering ----------
 function matchesAllFilters(paper, opts={excludeFacet:null}){
   const q = normalize(document.getElementById('searchBox')?.value ?? '');
   const yearMin = safeYear(document.getElementById('yearMin')?.value ?? '');
@@ -101,6 +82,7 @@ function matchesAllFilters(paper, opts={excludeFacet:null}){
 
   for(const f of FACETS){
     if(opts.excludeFacet && f.key === opts.excludeFacet) continue;
+
     const selected = state.facetSelected[f.key];
     if(selected && selected.size){
       const vals = splitValues(paper[f.key]);
@@ -118,16 +100,18 @@ function getFilteredPapers(){
   return (DATA.papers ?? []).filter(p => matchesAllFilters(p));
 }
 
+// ---------- UI: Meta ----------
 function renderMeta(filtered){
   const total = (DATA.papers ?? []).length;
-  const n = filtered.length;
   const meta = document.getElementById('meta');
-  if(meta) meta.textContent = `${n} / ${total} papers`;
+  if(meta) meta.textContent = `${filtered.length} / ${total} papers`;
 }
 
+// ---------- UI: Table ----------
 function renderTable(rows){
-  const table = document.getElementById('papersTable');
+  const table = document.getElementById('papersTable'); // <-- matches your HTML
   if(!table) return;
+
   const thead = table.querySelector('thead');
   const tbody = table.querySelector('tbody');
   if(!thead || !tbody) return;
@@ -147,7 +131,6 @@ function renderTable(rows){
     const tr = document.createElement('tr');
     for(const c of VISIBLE_COLS){
       const td = document.createElement('td');
-
       if(c === 'DOI_or_URL'){
         td.innerHTML = formatDoiOrUrl(r[c]);
       }else{
@@ -159,13 +142,14 @@ function renderTable(rows){
         td.addEventListener('click', () => openBibtexModal(r));
         td.title = 'Click to view BibTeX';
       }
+
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
   }
 }
 
-// ----- Modal (matches your IDs) -----
+// ---------- Modal (matches your IDs) ----------
 function showModal(title, bodyHtml){
   const modal = document.getElementById('modal');
   const modalTitle = document.getElementById('modalTitle');
@@ -242,7 +226,7 @@ function initModal(){
   }
 }
 
-// ----- Facets -----
+// ---------- Facets ----------
 function facetCounts(excludeFacetKey){
   const counts = new Map();
   for(const p of (DATA.papers ?? [])){
@@ -340,6 +324,7 @@ function renderFacets(){
   }
 }
 
+// ---------- Column picker ----------
 function initColumnPicker(){
   const colsSelect = document.getElementById('colsSelect');
   if(!colsSelect) return;
@@ -360,14 +345,13 @@ function initColumnPicker(){
   });
 }
 
-// ----- Charts (counts lifecycle using primary+secondary via PillarAny) -----
+// ---------- Charts (counts by PillarAny multi-label) ----------
 function updateCharts(filtered){
   const pillarOrder = DATA.pillars ?? [];
   const pillarCounts = new Map(pillarOrder.map(p => [p, 0]));
 
   for(const p of filtered){
     const vals = splitValues(p.PillarAny ?? p.Pillar);
-    if(vals.length === 0) continue;
     for(const key of vals){
       if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
       pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
@@ -416,6 +400,7 @@ function apply(){
   updateCharts(filtered);
 }
 
+// ---------- Downloads / Reset ----------
 function resetAll(){
   const sb = document.getElementById('searchBox');
   const y1 = document.getElementById('yearMin');
@@ -444,7 +429,7 @@ function initDownloads(){
     });
   }
 
-  // Your HTML has downloadBibBtn
+  // Your HTML has Download BibTeX button
   const bibBtn = document.getElementById('downloadBibBtn');
   if(bibBtn){
     bibBtn.addEventListener('click', () => {
@@ -455,40 +440,14 @@ function initDownloads(){
   }
 
   const resetBtn = document.getElementById('resetBtn');
-  if(resetBtn){
-    resetBtn.addEventListener('click', () => resetAll());
-  }
+  if(resetBtn) resetBtn.addEventListener('click', resetAll);
 }
 
+// ---------- Main ----------
 (async function main(){
   try{
     DATA = await loadData();
     FACETS = DATA.facets ?? [];
-
-    // Derived anomaly-type facet
-    for(const p of (DATA.papers ?? [])){
-      p.AnomalyType = deriveAnomalyType(p);
-    }
-
-    // Derive PillarAny (primary + secondary)
-    for(const p of (DATA.papers ?? [])){
-      const prim = (p.Pillar ?? '').toString().trim();
-      const all = (p.Pillar_All ?? '').toString().trim();
-      const sec = (p.Pillar_Secondary ?? '').toString().trim();
-      if(all){
-        p.PillarAny = all;
-      }else if(sec){
-        p.PillarAny = [prim, sec].filter(Boolean).join(', ');
-      }else{
-        p.PillarAny = prim;
-      }
-    }
-
-    // Ensure AnomalyType facet exists after Pillar (primary)
-    if(!FACETS.some(f => (f.key || '').toLowerCase() === 'anomalytype')){
-      const idx = Math.max(0, FACETS.findIndex(f => (f.key || '') === 'Pillar') + 1);
-      FACETS.splice(idx, 0, {key:'AnomalyType', label:'Anomaly type'});
-    }
 
     ALL_COLS = Object.keys((DATA.papers ?? [])[0] ?? {});
     initColumnPicker();
