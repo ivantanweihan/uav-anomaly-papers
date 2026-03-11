@@ -35,10 +35,7 @@ data = {
     {"key":"Technique","label":"Technique"},
     {"key":"DataSource","label":"Data source"},
     {"key":"ApplicationContext","label":"Application context"},
-    {"key":"DatasetAvailable","label":"Dataset available"},
     {"key":"SourceOfAnomaly","label":"Source of anomaly"},
-    {"key":"NatureOfAnomaly","label":"Nature of anomaly"},
-    {"key":"DetectionApproach","label":"Detection approach"},
   ]
 }
 
