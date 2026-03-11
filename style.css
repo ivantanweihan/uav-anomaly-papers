@@ -212,3 +212,10 @@ a:hover{text-decoration:underline}
   .sidebar{position:relative; top:0}
   .charts{grid-template-columns:1fr}
 }
+
+.modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; padding:24px; z-index:9999; }
+.modal.show{ display:flex; }
+.modal-content{ background:#fff; max-width:900px; width:100%; border-radius:12px; padding:16px; }
+.modal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.modal-pre{ max-height:60vh; overflow:auto; white-space:pre-wrap; background:#f6f6f6; padding:12px; border-radius:8px; }
+.modal-actions{ display:flex; justify-content:flex-end; margin-top:12px; gap:8px; }
