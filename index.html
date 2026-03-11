@@ -23,28 +23,34 @@
 
   <main class="layout">
     <aside class="sidebar">
-<div class="panel">
+
+      <div class="panel">
         <div class="panel-title">Filters</div>
         <div id="facets"></div>
-      
-<div class="panel">
+      </div>
+
+      <div class="panel">
         <label class="label" for="searchBox">Search</label>
         <input id="searchBox" type="search" placeholder="title, authors, venue, year, method..." />
         <div class="hint">Search runs across all visible metadata (BibTeX excluded for speed).</div>
-      
-<div class="panel">
+      </div>
+
+      <div class="panel">
         <div class="panel-title">Year</div>
         <div class="row">
           <input id="yearMin" type="number" placeholder="min" />
           <span class="sep">–</span>
           <input id="yearMax" type="number" placeholder="max" />
         </div>
-      
-<div class="panel">
+      </div>
+
+      <div class="panel">
         <div class="panel-title">Columns</div>
         <select id="colsSelect" multiple></select>
         <div class="hint">Tip: Ctrl/⌘-click to multi-select. Hide heavy columns (e.g., Abstract) if scrolling feels slow.</div>
-      </aside>
+      </div>
+
+    </aside>
 
     <section class="content">
       <section class="panel dashboard">
@@ -75,6 +81,7 @@
     </section>
   </main>
 
+  <!-- Single modal (keep only ONE) -->
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-head">
@@ -92,23 +99,5 @@
   <!-- Chart.js (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="script.js"></script>
-
-<div id="modal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <div class="modal-title">BibTeX</div>
-      <button id="closeModalBtn" type="button">Close</button>
-    </div>
-
-    <pre id="bibtexPre" class="modal-pre"></pre>
-
-    <div class="modal-actions">
-      <button id="copyBibtexBtn" type="button">Copy</button>
-    </div>
-  </div>
-</div>
-
-
 </body>
 </html>
-

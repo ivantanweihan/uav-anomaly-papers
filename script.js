@@ -21,43 +21,24 @@ function splitValues(raw){
       // Normalize lifecycle naming variants
       if(p === "Recovery / Mitigation") return "Recovery/Mitigation";
       if(p === "Analysis / Learning") return "Analysis/Learning";
-      if(p === "Recovery/Mitigation") return "Recovery/Mitigation";
-      if(p === "Analysis/Learning") return "Analysis/Learning";
       return p;
     });
 }
 
-// Derive a coarse anomaly-type label for RQ1-style filtering.
-// Categories: Hardware, Software/Control, Communication, Environmental, Operational/Policy
 function deriveAnomalyType(p) {
   const src = normalize(p.SourceOfAnomaly);
-
   if (!src) return "";
 
-  // direct matches (after normalize)
   if (src === "hardware") return "Hardware";
-  if (src === "software/control" || src === "software" || src === "control" || src === "software control") {
-    return "Software/Control";
-  }
+  if (src === "software/control" || src === "software" || src === "control" || src === "software control") return "Software/Control";
   if (src === "communication" || src === "comms" || src === "network") return "Communication";
   if (src === "environmental" || src === "environment") return "Environmental";
-  if (
-    src === "operational/policy" ||
-    src === "operational" ||
-    src === "policy" ||
-    src === "operations/policy" ||
-    src === "operational policy"
-  ) {
-    return "Operational/Policy";
-  }
+  if (src === "operational/policy" || src === "operational" || src === "policy" || src === "operations/policy" || src === "operational policy") return "Operational/Policy";
 
-  // fallback: if column sometimes already has the exact label casing
-  // (e.g., "Hardware") and normalize() didn't collapse it as expected
   const raw = (p.SourceOfAnomaly || "").trim();
   if (raw === "Hardware" || raw === "Software/Control" || raw === "Communication" || raw === "Environmental" || raw === "Operational/Policy") {
     return raw;
   }
-
   return "";
 }
 
@@ -105,14 +86,12 @@ let pillarChart=null;
 let yearChart=null;
 
 function matchesAllFilters(paper, opts={excludeFacet:null}){
-  const q = normalize(document.getElementById('searchBox').value);
-  const yearMin = safeYear(document.getElementById('yearMin').value);
-  const yearMax = safeYear(document.getElementById('yearMax').value);
+  const q = normalize(document.getElementById('searchBox')?.value ?? '');
+  const yearMin = safeYear(document.getElementById('yearMin')?.value ?? '');
+  const yearMax = safeYear(document.getElementById('yearMax')?.value ?? '');
 
   if(q){
-    const hay = ALL_COLS
-      .map(c => normalize(paper[c]))
-      .join(' ');
+    const hay = ALL_COLS.map(c => normalize(paper[c])).join(' ');
     if(!hay.includes(q)) return false;
   }
 
@@ -125,7 +104,6 @@ function matchesAllFilters(paper, opts={excludeFacet:null}){
     const selected = state.facetSelected[f.key];
     if(selected && selected.size){
       const vals = splitValues(paper[f.key]);
-      // must match at least one selected
       let ok=false;
       for(const v of vals){
         if(selected.has(v)){ ok=true; break; }
@@ -133,7 +111,6 @@ function matchesAllFilters(paper, opts={excludeFacet:null}){
       if(!ok) return false;
     }
   }
-
   return true;
 }
 
@@ -145,12 +122,16 @@ function renderMeta(filtered){
   const total = (DATA.papers ?? []).length;
   const n = filtered.length;
   const meta = document.getElementById('meta');
-  meta.textContent = `${n} / ${total} papers`;
+  if(meta) meta.textContent = `${n} / ${total} papers`;
 }
 
 function renderTable(rows){
-  const thead = document.querySelector('#table thead');
-  const tbody = document.querySelector('#table tbody');
+  const table = document.getElementById('papersTable');
+  if(!table) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  if(!thead || !tbody) return;
+
   thead.innerHTML = '';
   tbody.innerHTML = '';
 
@@ -170,8 +151,7 @@ function renderTable(rows){
       if(c === 'DOI_or_URL'){
         td.innerHTML = formatDoiOrUrl(r[c]);
       }else{
-        const s = (r[c] ?? '').toString();
-        td.textContent = s;
+        td.textContent = (r[c] ?? '').toString();
       }
 
       if(c === 'BibTeX'){
@@ -179,40 +159,93 @@ function renderTable(rows){
         td.addEventListener('click', () => openBibtexModal(r));
         td.title = 'Click to view BibTeX';
       }
-
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
   }
 }
 
-function openBibtexModal(paper){
+// ----- Modal (matches your IDs) -----
+function showModal(title, bodyHtml){
   const modal = document.getElementById('modal');
-  const pre = document.getElementById('bibtexPre');
-  pre.textContent = (paper.BibTeX ?? '').toString();
-  modal.classList.add('show');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+  if(!modal || !modalTitle || !modalBody) return;
 
-  document.getElementById('copyBibtexBtn').onclick = async () => {
-    try{
-      await navigator.clipboard.writeText(pre.textContent);
-      alert('Copied BibTeX to clipboard.');
-    }catch{
-      alert('Could not copy. Please copy manually.');
-    }
-  };
+  modalTitle.textContent = title ?? '';
+  modalBody.innerHTML = bodyHtml ?? '';
+
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+}
+
+function hideModal(){
+  const modal = document.getElementById('modal');
+  if(!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+}
+
+let MODAL_CURRENT_PAPER = null;
+
+function openBibtexModal(paper){
+  MODAL_CURRENT_PAPER = paper;
+
+  const bib = (paper.BibTeX ?? '').toString();
+  const doi = (paper.DOI_or_URL ?? '').toString().trim();
+
+  const escaped = bib
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+
+  showModal(
+    paper.BibKey ? `BibTeX — ${paper.BibKey}` : 'BibTeX',
+    `<pre style="white-space:pre-wrap; margin:0;">${escaped}</pre>`
+  );
+
+  const copyBtn = document.getElementById('copyBibBtn');
+  if(copyBtn){
+    copyBtn.onclick = async () => {
+      try{
+        await navigator.clipboard.writeText(bib);
+        alert('Copied BibTeX to clipboard.');
+      }catch{
+        alert('Could not copy. Please copy manually.');
+      }
+    };
+  }
+
+  const openLinkBtn = document.getElementById('openLinkBtn');
+  if(openLinkBtn){
+    openLinkBtn.disabled = !doi;
+    openLinkBtn.onclick = () => {
+      if(!doi) return;
+      let url = doi;
+      if(!/^https?:\/\//i.test(url) && /^10\.\d{4,9}\//.test(url)){
+        url = `https://doi.org/${url}`;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    };
+  }
 }
 
 function initModal(){
+  const close = document.getElementById('modalClose');
+  if(close) close.addEventListener('click', hideModal);
+
   const modal = document.getElementById('modal');
-  document.getElementById('closeModalBtn').addEventListener('click', () => modal.classList.remove('show'));
-  modal.addEventListener('click', (e) => {
-    if(e.target === modal) modal.classList.remove('show');
-  });
+  if(modal){
+    modal.addEventListener('click', (e) => {
+      if(e.target === modal) hideModal();
+    });
+  }
 }
 
+// ----- Facets -----
 function facetCounts(excludeFacetKey){
   const counts = new Map();
-  for(const p of DATA.papers){
+  for(const p of (DATA.papers ?? [])){
     if(!matchesAllFilters(p, {excludeFacet: excludeFacetKey})) continue;
     for(const v of splitValues(p[excludeFacetKey])){
       counts.set(v, (counts.get(v) ?? 0) + 1);
@@ -223,6 +256,7 @@ function facetCounts(excludeFacetKey){
 
 function renderFacets(){
   const facetsDiv = document.getElementById('facets');
+  if(!facetsDiv) return;
   facetsDiv.innerHTML = '';
 
   for(const f of FACETS){
@@ -253,7 +287,7 @@ function renderFacets(){
     items.className = 'facet-items';
 
     const allVals = new Map();
-    for(const p of DATA.papers){
+    for(const p of (DATA.papers ?? [])){
       for(const v of splitValues(p[f.key])){
         allVals.set(v, (allVals.get(v) ?? 0) + 1);
       }
@@ -308,13 +342,14 @@ function renderFacets(){
 
 function initColumnPicker(){
   const colsSelect = document.getElementById('colsSelect');
-  colsSelect.innerHTML = '';
+  if(!colsSelect) return;
 
+  colsSelect.innerHTML = '';
   for(const c of ALL_COLS){
     const opt = document.createElement('option');
     opt.value = c;
     opt.textContent = c;
-    opt.selected = (c !== 'BibTeX'); // hide BibTeX by default
+    opt.selected = (c !== 'BibTeX');
     colsSelect.appendChild(opt);
   }
   VISIBLE_COLS = Array.from(colsSelect.selectedOptions).map(o => o.value);
@@ -325,24 +360,20 @@ function initColumnPicker(){
   });
 }
 
+// ----- Charts (counts lifecycle using primary+secondary via PillarAny) -----
 function updateCharts(filtered){
   const pillarOrder = DATA.pillars ?? [];
   const pillarCounts = new Map(pillarOrder.map(p => [p, 0]));
+
   for(const p of filtered){
     const vals = splitValues(p.PillarAny ?? p.Pillar);
-    if(vals.length === 0){
-      const key = (p.Pillar ?? '').toString().trim();
-      if(key){
-        if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
-        pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
-      }
-      continue;
-    }
+    if(vals.length === 0) continue;
     for(const key of vals){
       if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
       pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
     }
   }
+
   const pillarLabels = Array.from(pillarCounts.keys());
   const pillarData = pillarLabels.map(k => pillarCounts.get(k));
 
@@ -355,8 +386,12 @@ function updateCharts(filtered){
   const years = Array.from(yearCounts.keys()).sort((a,b)=>a-b);
   const yearData = years.map(y => yearCounts.get(y));
 
-  const pillarCtx = document.getElementById('pillarChart').getContext('2d');
-  const yearCtx = document.getElementById('yearChart').getContext('2d');
+  const pillarCanvas = document.getElementById('pillarChart');
+  const yearCanvas = document.getElementById('yearChart');
+  if(!pillarCanvas || !yearCanvas) return;
+
+  const pillarCtx = pillarCanvas.getContext('2d');
+  const yearCtx = yearCanvas.getContext('2d');
 
   if(pillarChart) pillarChart.destroy();
   if(yearChart) yearChart.destroy();
@@ -382,44 +417,60 @@ function apply(){
 }
 
 function resetAll(){
-  document.getElementById('searchBox').value = '';
-  document.getElementById('yearMin').value = '';
-  document.getElementById('yearMax').value = '';
+  const sb = document.getElementById('searchBox');
+  const y1 = document.getElementById('yearMin');
+  const y2 = document.getElementById('yearMax');
+  if(sb) sb.value = '';
+  if(y1) y1.value = '';
+  if(y2) y2.value = '';
   for(const f of FACETS) state.facetSelected[f.key] = new Set();
+
   const colsSelect = document.getElementById('colsSelect');
-  Array.from(colsSelect.options).forEach(o => o.selected = (o.value !== 'BibTeX'));
-  VISIBLE_COLS = Array.from(colsSelect.selectedOptions).map(o => o.value);
+  if(colsSelect){
+    Array.from(colsSelect.options).forEach(o => o.selected = (o.value !== 'BibTeX'));
+    VISIBLE_COLS = Array.from(colsSelect.selectedOptions).map(o => o.value);
+  }
   renderFacets();
   apply();
 }
 
 function initDownloads(){
-  document.getElementById('downloadCsvBtn').addEventListener('click', () => {
-    const filtered = getFilteredPapers();
-    const csv = toCsv(filtered, VISIBLE_COLS);
-    downloadText('uav_papers_filtered.csv', csv, 'text/csv;charset=utf-8');
-  });
+  const csvBtn = document.getElementById('downloadCsvBtn');
+  if(csvBtn){
+    csvBtn.addEventListener('click', () => {
+      const filtered = getFilteredPapers();
+      const csv = toCsv(filtered, VISIBLE_COLS);
+      downloadText('uav_papers_filtered.csv', csv, 'text/csv;charset=utf-8');
+    });
+  }
 
-  document.getElementById('downloadJsonBtn').addEventListener('click', async () => {
-    const filtered = getFilteredPapers();
-    downloadText('uav_papers_filtered.json', JSON.stringify(filtered, null, 2), 'application/json;charset=utf-8');
-  });
+  // Your HTML has downloadBibBtn
+  const bibBtn = document.getElementById('downloadBibBtn');
+  if(bibBtn){
+    bibBtn.addEventListener('click', () => {
+      const filtered = getFilteredPapers();
+      const bibs = filtered.map(p => (p.BibTeX ?? '').toString().trim()).filter(Boolean);
+      downloadText('uav_papers_filtered.bib', bibs.join('\n\n') + '\n', 'application/x-bibtex;charset=utf-8');
+    });
+  }
 
-  document.getElementById('resetBtn').addEventListener('click', () => resetAll());
+  const resetBtn = document.getElementById('resetBtn');
+  if(resetBtn){
+    resetBtn.addEventListener('click', () => resetAll());
+  }
 }
 
 (async function main(){
   try{
-    DATA=await loadData();
-    FACETS=DATA.facets ?? [];
-    // Add derived "Anomaly type" facet (RQ1-style)
-    // Compute derived label for each paper once on load.
+    DATA = await loadData();
+    FACETS = DATA.facets ?? [];
+
+    // Derived anomaly-type facet
     for(const p of (DATA.papers ?? [])){
       p.AnomalyType = deriveAnomalyType(p);
     }
 
-    // Derive a combined lifecycle field (primary + secondary) for filtering and charts.
-    // Prefers Pillar_All if present; otherwise combines Pillar and Pillar_Secondary.
+    // Derive PillarAny (primary + secondary)
     for(const p of (DATA.papers ?? [])){
       const prim = (p.Pillar ?? '').toString().trim();
       const all = (p.Pillar_All ?? '').toString().trim();
@@ -433,21 +484,21 @@ function initDownloads(){
       }
     }
 
-    // Insert facet after Pillar if not already present
+    // Ensure AnomalyType facet exists after Pillar (primary)
     if(!FACETS.some(f => (f.key || '').toLowerCase() === 'anomalytype')){
       const idx = Math.max(0, FACETS.findIndex(f => (f.key || '') === 'Pillar') + 1);
       FACETS.splice(idx, 0, {key:'AnomalyType', label:'Anomaly type'});
     }
 
-    ALL_COLS=Object.keys(DATA.papers[0] ?? {});
+    ALL_COLS = Object.keys((DATA.papers ?? [])[0] ?? {});
     initColumnPicker();
     renderFacets();
     initModal();
     initDownloads();
 
-    document.getElementById('searchBox').addEventListener('input', ()=>{ renderFacets(); apply(); });
-    document.getElementById('yearMin').addEventListener('input', ()=>{ renderFacets(); apply(); });
-    document.getElementById('yearMax').addEventListener('input', ()=>{ renderFacets(); apply(); });
+    document.getElementById('searchBox')?.addEventListener('input', ()=>{ renderFacets(); apply(); });
+    document.getElementById('yearMin')?.addEventListener('input', ()=>{ renderFacets(); apply(); });
+    document.getElementById('yearMax')?.addEventListener('input', ()=>{ renderFacets(); apply(); });
 
     apply();
   }catch(err){
