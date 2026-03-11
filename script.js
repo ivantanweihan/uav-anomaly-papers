@@ -14,7 +14,17 @@ function splitValues(raw){
   const s = (raw ?? '').toString().trim();
   if(!s) return [];
   const parts = s.split(/[\n;|]+/g).flatMap(x => x.split(/\s*,\s*/g));
-  return parts.map(p => p.trim()).filter(Boolean);
+  return parts
+    .map(p => p.trim())
+    .filter(Boolean)
+    .map(p => {
+      // Normalize lifecycle naming variants
+      if(p === "Recovery / Mitigation") return "Recovery/Mitigation";
+      if(p === "Analysis / Learning") return "Analysis/Learning";
+      if(p === "Recovery/Mitigation") return "Recovery/Mitigation";
+      if(p === "Analysis/Learning") return "Analysis/Learning";
+      return p;
+    });
 }
 
 // Derive a coarse anomaly-type label for RQ1-style filtering.
@@ -51,7 +61,6 @@ function deriveAnomalyType(p) {
   return "";
 }
 
-
 function toCsv(rows, cols){
   const esc = (v) => {
     const s = (v ?? '').toString().replaceAll('\r',' ').replaceAll('\n',' ');
@@ -75,12 +84,10 @@ function downloadText(filename, text, mime='text/plain;charset=utf-8'){
   URL.revokeObjectURL(url);
 }
 
-function linkify(value){
-  const s = (value ?? '').toString().trim();
+function formatDoiOrUrl(s){
+  s = (s ?? '').toString().trim();
   if(!s) return '';
-  if(/^https?:\/\//i.test(s)){
-    return `<a href="${s}" target="_blank" rel="noopener noreferrer">${s}</a>`;
-  }
+  if(/^https?:\/\//i.test(s)) return `<a href="${s}" target="_blank" rel="noopener noreferrer">${s}</a>`;
   if(/^10\.\d{4,9}\//.test(s)){
     const url = `https://doi.org/${s}`;
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${s}</a>`;
@@ -99,65 +106,108 @@ let yearChart=null;
 
 function matchesAllFilters(paper, opts={excludeFacet:null}){
   const q = normalize(document.getElementById('searchBox').value);
+  const yearMin = safeYear(document.getElementById('yearMin').value);
+  const yearMax = safeYear(document.getElementById('yearMax').value);
+
   if(q){
-    const colsForSearch = ALL_COLS.filter(c => c !== 'BibTeX');
-    const hay = colsForSearch.map(c => normalize(paper[c])).join(' | ');
+    const hay = ALL_COLS
+      .map(c => normalize(paper[c]))
+      .join(' ');
     if(!hay.includes(q)) return false;
   }
 
-  const yMin = safeYear(document.getElementById('yearMin').value);
-  const yMax = safeYear(document.getElementById('yearMax').value);
   const y = safeYear(paper.Year);
-  if(yMin !== null && (y === null || y < yMin)) return false;
-  if(yMax !== null && (y === null || y > yMax)) return false;
+  if(yearMin !== null && (y === null || y < yearMin)) return false;
+  if(yearMax !== null && (y === null || y > yearMax)) return false;
 
   for(const f of FACETS){
-    if(opts.excludeFacet && opts.excludeFacet === f.key) continue;
+    if(opts.excludeFacet && f.key === opts.excludeFacet) continue;
     const selected = state.facetSelected[f.key];
     if(selected && selected.size){
       const vals = splitValues(paper[f.key]);
-      const ok = vals.some(v => selected.has(v));
+      // must match at least one selected
+      let ok=false;
+      for(const v of vals){
+        if(selected.has(v)){ ok=true; break; }
+      }
       if(!ok) return false;
     }
   }
+
   return true;
 }
 
 function getFilteredPapers(){
-  return DATA.papers.filter(p => matchesAllFilters(p));
+  return (DATA.papers ?? []).filter(p => matchesAllFilters(p));
 }
 
 function renderMeta(filtered){
-  document.getElementById('meta').textContent = `Showing ${filtered.length} / ${DATA.papers.length} papers`;
+  const total = (DATA.papers ?? []).length;
+  const n = filtered.length;
+  const meta = document.getElementById('meta');
+  meta.textContent = `${n} / ${total} papers`;
 }
 
 function renderTable(rows){
-  const table = document.getElementById('papersTable');
-  const thead = table.querySelector('thead');
-  const tbody = table.querySelector('tbody');
+  const thead = document.querySelector('#table thead');
+  const tbody = document.querySelector('#table tbody');
   thead.innerHTML = '';
   tbody.innerHTML = '';
 
   const trh = document.createElement('tr');
-  for(const col of VISIBLE_COLS){
+  for(const c of VISIBLE_COLS){
     const th = document.createElement('th');
-    th.textContent = col;
+    th.textContent = c;
     trh.appendChild(th);
   }
   thead.appendChild(trh);
 
-  for(const p of rows){
+  for(const r of rows){
     const tr = document.createElement('tr');
-    tr.style.cursor = 'pointer';
-    tr.addEventListener('click', () => openModal(p));
-    for(const col of VISIBLE_COLS){
+    for(const c of VISIBLE_COLS){
       const td = document.createElement('td');
-      if(col === 'DOI_or_URL') td.innerHTML = linkify(p[col]);
-      else td.textContent = (p[col] ?? '').toString();
+
+      if(c === 'DOI_or_URL'){
+        td.innerHTML = formatDoiOrUrl(r[c]);
+      }else{
+        const s = (r[c] ?? '').toString();
+        td.textContent = s;
+      }
+
+      if(c === 'BibTeX'){
+        td.classList.add('bibtex-cell');
+        td.addEventListener('click', () => openBibtexModal(r));
+        td.title = 'Click to view BibTeX';
+      }
+
       tr.appendChild(td);
     }
     tbody.appendChild(tr);
   }
+}
+
+function openBibtexModal(paper){
+  const modal = document.getElementById('modal');
+  const pre = document.getElementById('bibtexPre');
+  pre.textContent = (paper.BibTeX ?? '').toString();
+  modal.classList.add('show');
+
+  document.getElementById('copyBibtexBtn').onclick = async () => {
+    try{
+      await navigator.clipboard.writeText(pre.textContent);
+      alert('Copied BibTeX to clipboard.');
+    }catch{
+      alert('Could not copy. Please copy manually.');
+    }
+  };
+}
+
+function initModal(){
+  const modal = document.getElementById('modal');
+  document.getElementById('closeModalBtn').addEventListener('click', () => modal.classList.remove('show'));
+  modal.addEventListener('click', (e) => {
+    if(e.target === modal) modal.classList.remove('show');
+  });
 }
 
 function facetCounts(excludeFacetKey){
@@ -279,9 +329,19 @@ function updateCharts(filtered){
   const pillarOrder = DATA.pillars ?? [];
   const pillarCounts = new Map(pillarOrder.map(p => [p, 0]));
   for(const p of filtered){
-    const key = (p.Pillar ?? '').toString().trim();
-    if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
-    pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
+    const vals = splitValues(p.PillarAny ?? p.Pillar);
+    if(vals.length === 0){
+      const key = (p.Pillar ?? '').toString().trim();
+      if(key){
+        if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
+        pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
+      }
+      continue;
+    }
+    for(const key of vals){
+      if(!pillarCounts.has(key)) pillarCounts.set(key, 0);
+      pillarCounts.set(key, (pillarCounts.get(key) ?? 0) + 1);
+    }
   }
   const pillarLabels = Array.from(pillarCounts.keys());
   const pillarData = pillarLabels.map(k => pillarCounts.get(k));
@@ -333,87 +393,19 @@ function resetAll(){
   apply();
 }
 
-function bibtexFor(p){
-  const b = (p.BibTeX ?? '').toString().trim();
-  if(b) return b;
-  const key = (p.BibKey ?? '').toString().trim() || 'missingkey';
-  const title = (p.Title ?? '').toString().replaceAll('{','').replaceAll('}','');
-  const year = safeYear(p.Year);
-  const authors = (p.Authors ?? '').toString();
-  return `@misc{${key},\n  title={${title}},\n  author={${authors}},\n  year={${year ?? ''}},\n}\n`;
-}
-
-function bibtexDownload(filtered){
-  const entries = filtered.map(bibtexFor).filter(x => x.trim().length > 0);
-  const text = entries.join('\n\n') + '\n';
-  downloadText('filtered_papers.bib', text, 'application/x-bibtex;charset=utf-8');
-}
-
-function csvDownload(filtered){
-  const csv = toCsv(filtered, ALL_COLS);
-  downloadText('filtered_papers.csv', csv, 'text/csv;charset=utf-8');
-}
-
-// Modal
-let currentModalPaper=null;
-function kvRow(k,v,isHtml=false){
-  const wrap=document.createElement('div'); wrap.className='kv';
-  const kk=document.createElement('div'); kk.className='k'; kk.textContent=k;
-  const vv=document.createElement('div'); vv.className='v';
-  if(isHtml) vv.innerHTML=v; else vv.textContent=(v ?? '').toString();
-  wrap.appendChild(kk); wrap.appendChild(vv);
-  return wrap;
-}
-function openModal(p){
-  currentModalPaper=p;
-  document.getElementById('modalTitle').textContent=(p.Title ?? '').toString() || '(Untitled)';
-  const body=document.getElementById('modalBody'); body.innerHTML='';
-  body.appendChild(kvRow('Authors', p.Authors));
-  body.appendChild(kvRow('Year', p.Year));
-  body.appendChild(kvRow('Venue', p['Venue/Publisher']));
-  body.appendChild(kvRow('Pillar', p.Pillar));
-  body.appendChild(kvRow('DOI/URL', linkify(p.DOI_or_URL), true));
-  body.appendChild(kvRow('Abstract', p.Abstract));
-  body.appendChild(kvRow('Key findings', p.KeyFindings));
-  body.appendChild(kvRow('Limitations', p.Limitations));
-  body.appendChild(kvRow('BibTeX', bibtexFor(p)));
-  const modal=document.getElementById('modal');
-  modal.classList.remove('hidden');
-  modal.setAttribute('aria-hidden','false');
-}
-function closeModal(){
-  const modal=document.getElementById('modal');
-  modal.classList.add('hidden');
-  modal.setAttribute('aria-hidden','true');
-  currentModalPaper=null;
-}
-function initModal(){
-  document.getElementById('modalClose').addEventListener('click', closeModal);
-  document.getElementById('modal').addEventListener('click', (e)=>{ if(e.target.id==='modal') closeModal(); });
-  document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') closeModal(); });
-
-  document.getElementById('copyBibBtn').addEventListener('click', async ()=>{
-    if(!currentModalPaper) return;
-    const text=bibtexFor(currentModalPaper);
-    try{
-      await navigator.clipboard.writeText(text);
-      const btn=document.getElementById('copyBibBtn');
-      const prev=btn.textContent;
-      btn.textContent='Copied!';
-      setTimeout(()=>btn.textContent=prev, 900);
-    }catch(err){
-      alert('Copy failed. Your browser may block clipboard access on this page.');
-    }
+function initDownloads(){
+  document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+    const filtered = getFilteredPapers();
+    const csv = toCsv(filtered, VISIBLE_COLS);
+    downloadText('uav_papers_filtered.csv', csv, 'text/csv;charset=utf-8');
   });
 
-  document.getElementById('openLinkBtn').addEventListener('click', ()=>{
-    if(!currentModalPaper) return;
-    const s=(currentModalPaper.DOI_or_URL ?? '').toString().trim();
-    let url=s;
-    if(/^10\.\d{4,9}\//.test(s)) url=`https://doi.org/${s}`;
-    if(/^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener');
-    else alert('No DOI/URL available for this paper.');
+  document.getElementById('downloadJsonBtn').addEventListener('click', async () => {
+    const filtered = getFilteredPapers();
+    downloadText('uav_papers_filtered.json', JSON.stringify(filtered, null, 2), 'application/json;charset=utf-8');
   });
+
+  document.getElementById('resetBtn').addEventListener('click', () => resetAll());
 }
 
 (async function main(){
@@ -425,6 +417,22 @@ function initModal(){
     for(const p of (DATA.papers ?? [])){
       p.AnomalyType = deriveAnomalyType(p);
     }
+
+    // Derive a combined lifecycle field (primary + secondary) for filtering and charts.
+    // Prefers Pillar_All if present; otherwise combines Pillar and Pillar_Secondary.
+    for(const p of (DATA.papers ?? [])){
+      const prim = (p.Pillar ?? '').toString().trim();
+      const all = (p.Pillar_All ?? '').toString().trim();
+      const sec = (p.Pillar_Secondary ?? '').toString().trim();
+      if(all){
+        p.PillarAny = all;
+      }else if(sec){
+        p.PillarAny = [prim, sec].filter(Boolean).join(', ');
+      }else{
+        p.PillarAny = prim;
+      }
+    }
+
     // Insert facet after Pillar if not already present
     if(!FACETS.some(f => (f.key || '').toLowerCase() === 'anomalytype')){
       const idx = Math.max(0, FACETS.findIndex(f => (f.key || '') === 'Pillar') + 1);
@@ -435,20 +443,15 @@ function initModal(){
     initColumnPicker();
     renderFacets();
     initModal();
+    initDownloads();
 
     document.getElementById('searchBox').addEventListener('input', ()=>{ renderFacets(); apply(); });
     document.getElementById('yearMin').addEventListener('input', ()=>{ renderFacets(); apply(); });
     document.getElementById('yearMax').addEventListener('input', ()=>{ renderFacets(); apply(); });
 
-    document.getElementById('resetBtn').addEventListener('click', resetAll);
-    document.getElementById('downloadCsvBtn').addEventListener('click', ()=>csvDownload(getFilteredPapers()));
-    document.getElementById('downloadBibBtn').addEventListener('click', ()=>bibtexDownload(getFilteredPapers()));
-
     apply();
   }catch(err){
     console.error(err);
-    document.body.prepend(Object.assign(document.createElement('div'), {
-      innerHTML: `<p style="padding:16px;color:#fff;background:#b91c1c">Error: ${err.message}</p>`
-    }));
+    alert('Failed to load data. Check console for details.');
   }
 })();
